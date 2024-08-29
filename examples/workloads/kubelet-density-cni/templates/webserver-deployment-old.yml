@@ -10,7 +10,6 @@ spec:
     spec:
       nodeSelector:
         node-role.kubernetes.io/worker: ""
-        #preferredWorker: "true"  # Add this line
       containers:
       - name: webserver
         image: quay.io/cloud-bulldozer/sampleapp:latest

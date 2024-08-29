@@ -10,15 +10,13 @@ spec:
     spec:
       nodeSelector:
         node-role.kubernetes.io/worker: ""
-        #preferredWorker: "true"  # Add this line
       containers:
       - name: curlapp
         image: quay.io/cloud-bulldozer/curl:latest
         command: ["sleep", "inf"]
         env:
         - name: WEBSERVER_HOSTNAME
-          #value: webserver-{{.Replica}}-{{.Iteration}}
-          value: webserver
+          value: webserver-{{.Replica}}-{{.Iteration}}
         - name: WEBSERVER_PORT
           value: "8080"
         imagePullPolicy: IfNotPresent
@@ -26,7 +24,7 @@ spec:
           privileged: false
         startupProbe:
           exec:
-            command:
+            command: 
               - "/bin/sh"
               - "-c"
               - "curl ${WEBSERVER_HOSTNAME}:${WEBSERVER_PORT}"
