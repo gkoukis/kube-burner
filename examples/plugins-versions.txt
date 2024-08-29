@@ -1,0 +1,9 @@
+calico v3.28.1
+flannel v0.25.5
+cilium v1.16.0
+krouter v2.2.1
+antrea v2.1.0
+kovn v1.11.21
+multus v4.1.0 (thick)
+k3s calico v1.30.4+k3s1 v3.28.1
+k3s cilium v1.30.4+k3s1 v1.16.0
