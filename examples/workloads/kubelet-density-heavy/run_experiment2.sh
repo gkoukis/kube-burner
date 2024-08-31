@@ -69,7 +69,7 @@ fi
 
 # Outer loop to repeat the experiments multiple times
 for (( run=1; run<=iterations; run++ )); do
-  echo "Starting run $run of $repeat_count"
+  echo "Starting run $run of $iterations"
 
   # Loop over the defined experiments
   for experiment in "${experiments[@]}"; do
