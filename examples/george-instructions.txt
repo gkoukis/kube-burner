@@ -4,7 +4,7 @@
     chmod +x /usr/local/bin/kube-burner
 4) git clone https://github.com/gkoukis/kube-burner.git
 5) kubectl label node <worker_node> node-role.kubernetes.io/worker=""
-6) kubectl label node {{ worker_node }} preferredWorker=true
+6) kubectl label node <worker_node> preferredWorker=true
 7) cd kube-burner/examples/workloads/kubelet-density-cni (for instance...)
-8) modify το script run_experiments2.sh και chmod +x run_experiments2.sh και run
+8) modify the script run_experiments2.sh and chmod +x run_experiments2.sh and run
  
