@@ -39,9 +39,9 @@ type measurement interface {
 	start(*sync.WaitGroup) error
 	stop() error
 	collect(*sync.WaitGroup)
-	setConfig(types.Measurement)
-	validateConfig() error
+	setConfig(types.Measurement) error
 	index(string, map[string]indexers.Indexer)
+	getMetrics() *sync.Map
 }
 
 var factory measurementFactory
@@ -83,8 +83,7 @@ func (mf *measurementFactory) register(measurement types.Measurement, measuremen
 	if _, exists := mf.createFuncs[measurement.Name]; exists {
 		log.Warnf("Measurement already registered: %s", measurement.Name)
 	} else {
-		measurementFunc.setConfig(measurement)
-		if err := measurementFunc.validateConfig(); err != nil {
+		if err := measurementFunc.setConfig(measurement); err != nil {
 			return fmt.Errorf("%s config error: %s", measurement.Name, err)
 		}
 		mf.createFuncs[measurement.Name] = measurementFunc
@@ -137,4 +136,13 @@ func Index(jobName string, indexerList map[string]indexers.Indexer) {
 		log.Infof("Indexing collected data from measurement: %s", name)
 		measurement.index(jobName, indexerList)
 	}
+}
+
+func GetMetrics() []*sync.Map {
+	var metricList []*sync.Map
+	for name, measurement := range factory.createFuncs {
+		log.Infof("Fetching metrics from measurement: %s", name)
+		metricList = append(metricList, measurement.getMetrics())
+	}
+	return metricList
 }

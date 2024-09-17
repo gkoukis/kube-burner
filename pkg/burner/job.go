@@ -64,7 +64,7 @@ type Executor struct {
 
 // returnPair is a pair of return codes for a job
 type returnPair struct {
-	innerRC int
+	innerRC         int
 	executionErrors string
 }
 
@@ -74,6 +74,8 @@ const (
 	jobIteration         = "Iteration"
 	jobUUID              = "UUID"
 	rcTimeout            = 2
+	rcAlert              = 3
+	rcMeasurement        = 4
 	garbageCollectionJob = "garbage-collection"
 )
 
@@ -88,6 +90,8 @@ var embedFSDir string
 // Returns:
 // - error code
 // - error
+//
+//nolint:gocyclo
 func Run(configSpec config.Spec, kubeClientProvider *config.KubeClientProvider, metricsScraper metrics.Scraper, timeout time.Duration) (int, error) {
 	var err error
 	var rc int
@@ -163,9 +167,10 @@ func Run(configSpec config.Spec, kubeClientProvider *config.KubeClientProvider, 
 					log.Error(err.Error())
 				}
 				if job.Churn {
-					currentJob.ChurnStart = time.Now().UTC()
+					now := time.Now().UTC()
+					currentJob.ChurnStart = &now
 					job.RunCreateJobWithChurn()
-					currentJob.ChurnEnd = time.Now().UTC()
+					currentJob.ChurnEnd = &now
 				}
 				globalWaitMap[strconv.Itoa(jobPosition)+job.Name] = waitListNamespaces
 				executorMap[strconv.Itoa(jobPosition)+job.Name] = job
@@ -205,7 +210,7 @@ func Run(configSpec config.Spec, kubeClientProvider *config.KubeClientProvider, 
 			if err = measurements.Stop(); err != nil {
 				errs = append(errs, err)
 				log.Error(err.Error())
-				innerRC = 1
+				innerRC = rcMeasurement
 			}
 			if !job.SkipIndexing && len(metricsScraper.IndexerList) > 0 {
 				msWg.Add(1)
@@ -251,7 +256,7 @@ func Run(configSpec config.Spec, kubeClientProvider *config.KubeClientProvider, 
 				if err := alertM.Evaluate(job); err != nil {
 					errs = append(errs, err)
 					jobAlerts = append(jobAlerts, err)
-					innerRC = 1
+					innerRC = rcAlert
 				}
 			}
 			if len(jobAlerts) > 0 {
@@ -267,7 +272,7 @@ func Run(configSpec config.Spec, kubeClientProvider *config.KubeClientProvider, 
 	case rc = <-res:
 	case <-time.After(timeout):
 		err := fmt.Errorf("%v timeout reached", timeout)
-		log.Errorf(err.Error())
+		log.Error(err.Error())
 		errs = append(errs, err)
 		rc = rcTimeout
 		indexMetrics(uuid, executedJobs, returnMap, metricsScraper, configSpec, false, utilerrors.NewAggregate(errs).Error(), true)
@@ -285,7 +290,7 @@ func indexMetrics(uuid string, executedJobs []prometheus.Job, returnMap map[stri
 	var jobSummaries []JobSummary
 	for _, job := range executedJobs {
 		if !job.JobConfig.SkipIndexing {
-			if value, exists := returnMap[job.JobConfig.Name]; exists && !isTimeout{
+			if value, exists := returnMap[job.JobConfig.Name]; exists && !isTimeout {
 				innerRC = value.innerRC == 0
 				executionErrors = value.executionErrors
 			}
@@ -294,8 +299,8 @@ func indexMetrics(uuid string, executedJobs []prometheus.Job, returnMap map[stri
 				Timestamp:           job.Start,
 				EndTimestamp:        job.End,
 				ElapsedTime:         job.End.Sub(job.Start).Round(time.Second).Seconds(),
-				ChurnStartTimestamp: &job.ChurnStart,
-				ChurnEndTimestamp:   &job.ChurnEnd,
+				ChurnStartTimestamp: job.ChurnStart,
+				ChurnEndTimestamp:   job.ChurnEnd,
 				JobConfig:           job.JobConfig,
 				Metadata:            metricsScraper.Metadata,
 				Passed:              innerRC,

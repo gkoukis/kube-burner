@@ -35,8 +35,8 @@ Use "kube-burner [command] --help" for more information about a command.
 
 This is the main subcommand; it triggers a new kube-burner benchmark and it supports the these flags:
 
-- `uuid`: Benchmark ID. This is essentially an arbitrary string that is used for different purposes along the benchmark. For example, to label the objects created by kube-burner as mentioned in the [reference chapter](/kube-burner/latest/reference/configuration/#default-labels). By default, it is auto-generated.
-- `config`: Path or URL to a valid configuration file. See details about the configuration schema in the [observability chapter](/kube-burner/latest/reference/).
+- `uuid`: Benchmark ID. This is essentially an arbitrary string that is used for different purposes along the benchmark. For example, to label the objects created by kube-burner as mentioned in the [reference chapter](../reference/configuration.md#default-labels). By default, it is auto-generated.
+- `config`: Path or URL to a valid configuration file. See details about the configuration schema in the [reference chapter](../reference/configuration.md).
 - `log-level`: Logging level, one of: `debug`, `error`, `info` or `fatal`. Default `info`.
 - `metrics-endpoint`: Path to a valid metrics endpoint file.
 - `skip-tls-verify`: Skip TLS verification for Prometheus. The default is `true`.
@@ -79,6 +79,18 @@ A metrics-endpoints.yaml file with valid keys for the `init` command would look 
   password: bar
   alerts: [alert-profile.yaml]
 ```
+
+### Exit codes
+
+Kube-burner has defined a series of exit codes that can help to programmatically identify a benchmark execution error.
+
+| Exit code | Meaning |
+|--------|--------|
+| 0 | Benchmark execution finished normally |
+| 1 | Generic exit code, returned on a unrecoverable error (i.e: API Authorization error or config parsing error) |
+| 2 | Benchmark timeout, returned when kube-burner's execution time exceeds the value passed in the `--timeout` flag |
+| 3 | Alerting error, returned when a `error` or `critical` level alert is fired |
+| 4 | Measurement error, returned on some measurements error conditions, like `thresholds` |
 
 ## Index
 

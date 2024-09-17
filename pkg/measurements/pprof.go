@@ -46,8 +46,14 @@ func init() {
 	measurementMap["pprof"] = &pprof{}
 }
 
-func (p *pprof) setConfig(cfg types.Measurement) {
+func (p *pprof) setConfig(cfg types.Measurement) error {
 	p.config = cfg
+	for _, target := range p.config.PProfTargets {
+		if target.BearerToken != "" && (target.CertFile != "" || target.Cert != "") {
+			return fmt.Errorf("bearerToken and cert auth methods cannot be specified together in the same target")
+		}
+	}
+	return nil
 }
 
 func (p *pprof) start(measurementWg *sync.WaitGroup) error {
@@ -190,6 +196,10 @@ func (p *pprof) stop() error {
 func (p *pprof) index(_ string, _ map[string]indexers.Indexer) {
 }
 
+func (p *pprof) getMetrics() *sync.Map {
+	return &sync.Map{}
+}
+
 func readCerts(cert, privKey string) (string, string, error) {
 	var certFd, privKeyFd *os.File
 	var certData, privKeyData []byte
@@ -248,14 +258,5 @@ func copyCertsToPod(pod corev1.Pod, cert, privKey io.Reader) error {
 		}
 	}
 	log.Infof("Certificate and private key copied into %s %s", pod.Name, pod.Spec.Containers[0].Name)
-	return nil
-}
-
-func (p *pprof) validateConfig() error {
-	for _, target := range p.config.PProfTargets {
-		if target.BearerToken != "" && (target.CertFile != "" || target.Cert != "") {
-			return fmt.Errorf("bearerToken and cert auth methods cannot be specified together in the same target")
-		}
-	}
 	return nil
 }

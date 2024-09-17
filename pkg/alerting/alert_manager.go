@@ -16,9 +16,11 @@ package alerting
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"math"
+	"os"
 	"path"
 	"strings"
 	"text/template"
@@ -40,6 +42,7 @@ const (
 	sevError        severityLevel = "error"
 	sevCritical     severityLevel = "critical"
 	alertMetricName               = "alert"
+	rcAlert                       = 3
 )
 
 // alertProfile expression list
@@ -143,7 +146,7 @@ func (a *AlertManager) Evaluate(job prometheus.Job) error {
 			log.Warnf("Error performing query %s: %s", expr, err)
 			continue
 		}
-		alertData, err := parseMatrix(v, alert.Description, alert.Severity, &job.ChurnStart, &job.ChurnEnd)
+		alertData, err := parseMatrix(v, alert.Description, alert.Severity, job.ChurnStart, job.ChurnEnd)
 		if err != nil {
 			log.Error(err.Error())
 			errs = append(errs, err)
@@ -208,9 +211,10 @@ func parseMatrix(value model.Value, description string, severity severityLevel, 
 			case sevWarn:
 				log.Warnf("🚨 %s", msg)
 			case sevError:
-				errs = append(errs, fmt.Errorf(msg))
+				errs = append(errs, errors.New(msg))
 			case sevCritical:
-				log.Fatalf("🚨 %s", msg)
+				log.Errorf("🚨 %s", msg)
+				os.Exit(rcAlert)
 			default:
 				log.Infof("🚨 %s", msg)
 			}

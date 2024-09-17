@@ -271,8 +271,31 @@ func (p *vmiLatency) handleUpdateVMIPod(obj interface{}) {
 	}
 }
 
-func (p *vmiLatency) setConfig(cfg types.Measurement) {
+func (p *vmiLatency) setConfig(cfg types.Measurement) error {
 	p.config = cfg
+	var metricFound bool
+	var latencyMetrics = []string{"P99", "P95", "P50", "Avg", "Max"}
+	for _, th := range p.config.LatencyThresholds {
+		if th.ConditionType == string(kvv1.Pending) ||
+			th.ConditionType == string(kvv1.Scheduling) ||
+			th.ConditionType == string(kvv1.Scheduled) ||
+			th.ConditionType == string(kvv1.Running) ||
+			th.ConditionType == string(kvv1.VirtualMachineInstanceReady) ||
+			th.ConditionType == string(kvv1.Succeeded) {
+			for _, lm := range latencyMetrics {
+				if th.Metric == lm {
+					metricFound = true
+					break
+				}
+			}
+			if !metricFound {
+				return fmt.Errorf("unsupported metric %s in vmLatency measurement, supported are: %s", th.Metric, strings.Join(latencyMetrics, ", "))
+			}
+		} else {
+			return fmt.Errorf("unsupported vm condition type in vmLatency measurement: %s", th.ConditionType)
+		}
+	}
+	return nil
 }
 
 // Start starts vmiLatency measurement
@@ -396,7 +419,11 @@ func (p *vmiLatency) index(jobName string, indexerList map[string]indexers.Index
 		podLatencyMeasurement:          p.normLatencies,
 		podLatencyQuantilesMeasurement: p.latencyQuantiles,
 	}
-	indexLatencyMeasurement(p.config, jobName, metricMap, indexerList)
+	IndexLatencyMeasurement(p.config, jobName, metricMap, indexerList)
+}
+
+func (p *vmiLatency) getMetrics() *sync.Map {
+	return &p.metrics
 }
 
 func (p *vmiLatency) normalizeMetrics() {
@@ -452,30 +479,4 @@ func (p *vmiLatency) calcQuantiles() {
 	for podCondition, latencies := range quantileMap {
 		p.latencyQuantiles = append(p.latencyQuantiles, calcSummary(podCondition, latencies))
 	}
-}
-
-func (p *vmiLatency) validateConfig() error {
-	var metricFound bool
-	var latencyMetrics = []string{"P99", "P95", "P50", "Avg", "Max"}
-	for _, th := range p.config.LatencyThresholds {
-		if th.ConditionType == string(kvv1.Pending) ||
-			th.ConditionType == string(kvv1.Scheduling) ||
-			th.ConditionType == string(kvv1.Scheduled) ||
-			th.ConditionType == string(kvv1.Running) ||
-			th.ConditionType == string(kvv1.VirtualMachineInstanceReady) ||
-			th.ConditionType == string(kvv1.Succeeded) {
-			for _, lm := range latencyMetrics {
-				if th.Metric == lm {
-					metricFound = true
-					break
-				}
-			}
-			if !metricFound {
-				return fmt.Errorf("unsupported metric %s in vmLatency measurement, supported are: %s", th.Metric, strings.Join(latencyMetrics, ", "))
-			}
-		} else {
-			return fmt.Errorf("unsupported vm condition type in vmLatency measurement: %s", th.ConditionType)
-		}
-	}
-	return nil
 }
