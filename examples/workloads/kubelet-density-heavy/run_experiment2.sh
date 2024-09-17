@@ -1,53 +1,53 @@
 #!/bin/bash
 
 # Define the number of times to repeat the entire set of experiments
-iterations=8
-
-# Define the experiments with all metrics
-experiments=(
-  "jobIterations=1 qps=1 burst=1 postgres_deploy_replicas=10 app_deploy_replicas=10 postgres_service_replicas=10"
-  "jobIterations=1 qps=10 burst=10 postgres_deploy_replicas=10 app_deploy_replicas=10 postgres_service_replicas=10"
-  "jobIterations=1 qps=25 burst=25 postgres_deploy_replicas=10 app_deploy_replicas=10 postgres_service_replicas=10"
-  "jobIterations=1 qps=50 burst=50 postgres_deploy_replicas=10 app_deploy_replicas=10 postgres_service_replicas=10"
-  "jobIterations=1 qps=75 burst=75 postgres_deploy_replicas=10 app_deploy_replicas=10 postgres_service_replicas=10"
-  "jobIterations=1 qps=100 burst=100 postgres_deploy_replicas=10 app_deploy_replicas=10 postgres_service_replicas=10"
-  "jobIterations=1 qps=1 burst=1 postgres_deploy_replicas=20 app_deploy_replicas=20 postgres_service_replicas=20"
-  "jobIterations=1 qps=10 burst=10 postgres_deploy_replicas=20 app_deploy_replicas=20 postgres_service_replicas=20"
-  "jobIterations=1 qps=25 burst=25 postgres_deploy_replicas=20 app_deploy_replicas=20 postgres_service_replicas=20"
-  "jobIterations=1 qps=50 burst=50 postgres_deploy_replicas=20 app_deploy_replicas=20 postgres_service_replicas=20"
-  "jobIterations=1 qps=75 burst=75 postgres_deploy_replicas=20 app_deploy_replicas=20 postgres_service_replicas=20"
-  "jobIterations=1 qps=100 burst=100 postgres_deploy_replicas=20 app_deploy_replicas=20 postgres_service_replicas=20"
-  "jobIterations=1 qps=1 burst=1 postgres_deploy_replicas=40 app_deploy_replicas=40 postgres_service_replicas=40"
-  "jobIterations=1 qps=10 burst=10 postgres_deploy_replicas=40 app_deploy_replicas=40 postgres_service_replicas=40"
-  "jobIterations=1 qps=25 burst=25 postgres_deploy_replicas=40 app_deploy_replicas=40 postgres_service_replicas=40"
-  "jobIterations=1 qps=50 burst=50 postgres_deploy_replicas=40 app_deploy_replicas=40 postgres_service_replicas=40"
-  "jobIterations=1 qps=75 burst=75 postgres_deploy_replicas=40 app_deploy_replicas=40 postgres_service_replicas=40"
-  "jobIterations=1 qps=100 burst=100 postgres_deploy_replicas=40 app_deploy_replicas=40 postgres_service_replicas=40"
-  "jobIterations=1 qps=1 burst=1 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
-  "jobIterations=1 qps=10 burst=10 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
-  "jobIterations=1 qps=25 burst=25 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
-  "jobIterations=1 qps=50 burst=50 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
-  "jobIterations=1 qps=75 burst=75 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
-  "jobIterations=1 qps=100 burst=100 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
-  # Add more experiment combinations as needed
-)
+iterations=10
 
 # Define the experiments with all metrics
 #experiments=(
-#  "jobIterations=1 qps=1 burst=1 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
-#  "jobIterations=1 qps=10 burst=10 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
-#  "jobIterations=1 qps=25 burst=25 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
-#  "jobIterations=1 qps=50 burst=50 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
-#  "jobIterations=1 qps=75 burst=75 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
-#  "jobIterations=1 qps=100 burst=100 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
-#  "jobIterations=10 qps=1 burst=1 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
+# "jobIterations=1 qps=1 burst=1 postgres_deploy_replicas=10 app_deploy_replicas=10 postgres_service_replicas=10"
+# "jobIterations=1 qps=10 burst=10 postgres_deploy_replicas=10 app_deploy_replicas=10 postgres_service_replicas=10"
+# "jobIterations=1 qps=25 burst=25 postgres_deploy_replicas=10 app_deploy_replicas=10 postgres_service_replicas=10"
+# "jobIterations=1 qps=50 burst=50 postgres_deploy_replicas=10 app_deploy_replicas=10 postgres_service_replicas=10"
+# "jobIterations=1 qps=75 burst=75 postgres_deploy_replicas=10 app_deploy_replicas=10 postgres_service_replicas=10"
+# "jobIterations=1 qps=100 burst=100 postgres_deploy_replicas=10 app_deploy_replicas=10 postgres_service_replicas=10"
+# "jobIterations=1 qps=1 burst=1 postgres_deploy_replicas=20 app_deploy_replicas=20 postgres_service_replicas=20"
+# "jobIterations=1 qps=10 burst=10 postgres_deploy_replicas=20 app_deploy_replicas=20 postgres_service_replicas=20"
+# "jobIterations=1 qps=25 burst=25 postgres_deploy_replicas=20 app_deploy_replicas=20 postgres_service_replicas=20"
+# "jobIterations=1 qps=50 burst=50 postgres_deploy_replicas=20 app_deploy_replicas=20 postgres_service_replicas=20"
+# "jobIterations=1 qps=75 burst=75 postgres_deploy_replicas=20 app_deploy_replicas=20 postgres_service_replicas=20"
+# "jobIterations=1 qps=100 burst=100 postgres_deploy_replicas=20 app_deploy_replicas=20 postgres_service_replicas=20"
+# "jobIterations=1 qps=1 burst=1 postgres_deploy_replicas=40 app_deploy_replicas=40 postgres_service_replicas=40"
+# "jobIterations=1 qps=10 burst=10 postgres_deploy_replicas=40 app_deploy_replicas=40 postgres_service_replicas=40"
+# "jobIterations=1 qps=25 burst=25 postgres_deploy_replicas=40 app_deploy_replicas=40 postgres_service_replicas=40"
+# "jobIterations=1 qps=50 burst=50 postgres_deploy_replicas=40 app_deploy_replicas=40 postgres_service_replicas=40"
+# "jobIterations=1 qps=75 burst=75 postgres_deploy_replicas=40 app_deploy_replicas=40 postgres_service_replicas=40"
+# "jobIterations=1 qps=100 burst=100 postgres_deploy_replicas=40 app_deploy_replicas=40 postgres_service_replicas=40"
+# "jobIterations=1 qps=1 burst=1 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
+# "jobIterations=1 qps=10 burst=10 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
+# "jobIterations=1 qps=25 burst=25 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
+# "jobIterations=1 qps=50 burst=50 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
+# "jobIterations=1 qps=75 burst=75 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
+# "jobIterations=1 qps=100 burst=100 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
+# # Add more experiment combinations as needed
+#)
+
+# Define the experiments with all metrics
+experiments=(
+ "jobIterations=1 qps=1 burst=1 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
+ "jobIterations=1 qps=10 burst=10 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
+ "jobIterations=1 qps=25 burst=25 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
+ "jobIterations=1 qps=50 burst=50 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
+ "jobIterations=1 qps=75 burst=75 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
+ "jobIterations=1 qps=100 burst=100 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
+# "jobIterations=10 qps=1 burst=1 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
 #  "jobIterations=10 qps=10 burst=10 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
 #  "jobIterations=10 qps=25 burst=25 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
 #  "jobIterations=10 qps=50 burst=50 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
 #  "jobIterations=10 qps=75 burst=75 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
 #  "jobIterations=10 qps=100 burst=100 postgres_deploy_replicas=1 app_deploy_replicas=1 postgres_service_replicas=1"
   # Add more experiment combinations as needed
-#)
+)
 
 
 ## Output file for ContainersReady summary
@@ -91,6 +91,8 @@ for (( run=1; run<=iterations; run++ )); do
 
     # Run kube-burner (log will be created automatically)
     kube-burner init -c kubelet-density-heavy.yml
+    ### Check the microk8s.txt if using microk8s distro and use this command instead
+    #kube-burner init -c kubelet-density-cni.yml --kubeconfig ~/.kube/config
 
     # Identify the automatically created log file
     log_file=$(ls -t kube-burner-*.log | head -n 1)

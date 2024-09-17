@@ -90,6 +90,8 @@ for (( run=1; run<=iterations; run++ )); do
 
     # Run kube-burner (log will be created automatically)
     kube-burner init -c kubelet-density-cni.yml
+    ### Check the microk8s.txt if using microk8s distro and use this command instead
+    #kube-burner init -c kubelet-density-cni.yml --kubeconfig ~/.kube/config
 
     # Identify the automatically created log file
     log_file=$(ls -t kube-burner-*.log | head -n 1)
