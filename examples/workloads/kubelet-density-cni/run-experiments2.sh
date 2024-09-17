@@ -40,13 +40,13 @@ experiments=(
   "jobIterations=1 qps=50 burst=50 webserver_replicas=1 curl_replicas=1 service_replicas=1"
   "jobIterations=1 qps=75 burst=75 webserver_replicas=1 curl_replicas=1 service_replicas=1"
   "jobIterations=1 qps=100 burst=100 webserver_replicas=1 curl_replicas=1 service_replicas=1"
-  "jobIterations=10 qps=1 burst=1 webserver_replicas=1 curl_replicas=1 service_replicas=1"
-  "jobIterations=10 qps=10 burst=10 webserver_replicas=1 curl_replicas=1 service_replicas=1"
-  "jobIterations=10 qps=25 burst=25 webserver_replicas=1 curl_replicas=1 service_replicas=1"
-  "jobIterations=10 qps=50 burst=50 webserver_replicas=1 curl_replicas=1 service_replicas=1"
-  "jobIterations=10 qps=75 burst=75 webserver_replicas=1 curl_replicas=1 service_replicas=1"
-  "jobIterations=10 qps=100 burst=100 webserver_replicas=1 curl_replicas=1 service_replicas=1"
-  # Add more experiment combinations as needed
+#  "jobIterations=10 qps=1 burst=1 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+#  "jobIterations=10 qps=10 burst=10 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+#  "jobIterations=10 qps=25 burst=25 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+#  "jobIterations=10 qps=50 burst=50 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+#  "jobIterations=10 qps=75 burst=75 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+#  "jobIterations=10 qps=100 burst=100 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+#  # Add more experiment combinations as needed
 )
 
 ## Output file for ContainersReady summary
