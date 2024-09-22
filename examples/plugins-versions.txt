@@ -7,3 +7,5 @@ kovn v1.11.21
 multus v4.1.0 (thick)
 k3s calico v1.30.4+k3s1 v3.28.1
 k3s cilium v1.30.4+k3s1 v1.16.0
+mk8s flannel 1.31.0
+mk8s calico 1.31.0
