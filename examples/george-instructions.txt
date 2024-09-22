@@ -1,4 +1,4 @@
-1) curl -LO https://github.com/kube-burner/kube-burner/releases/v1.10.5/kube-burner-V1.10.5-linux-x86_64.tar.gz
+1) curl -LO https://github.com/kube-burner/kube-burner/releases/download/v1.10.5/kube-burner-V1.10.5-linux-x86_64.tar.gz
 2) tar -xzf kube-burner-V1.10.5-linux-x86_64.tar.gz
 3) sudo mv kube-burner /usr/local/bin/
     chmod +x /usr/local/bin/kube-burner
@@ -7,4 +7,3 @@
 6) kubectl label node <worker_node> preferredWorker=true
 7) cd kube-burner/examples/workloads/kubelet-density-cni (for instance...)
 8) modify the script run_experiments2.sh and chmod +x run_experiments2.sh and run
- 
