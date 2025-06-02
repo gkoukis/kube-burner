@@ -88,6 +88,10 @@ for (( run=1; run<=iterations; run++ )); do
       echo "Namespace 'kubelet-density-heavy' successfully deleted."
     fi
 
+    # kubectl create ns kubelet-density-heavy
+    # kubectl apply -f /home/athena/poc/calico-secondary-nad-new.yaml
+    # kubectl apply -f /home/athena/poc/flannel-nad.yaml
+
     # Parse the experiment string to extract the variables
     eval $experiment
 
