@@ -75,6 +75,19 @@ for (( run=1; run<=iterations; run++ )); do
   for experiment in "${experiments[@]}"; do
     echo "Running experiment with $experiment"
 
+    # Before creating any resources, check if namespace exists and delete if it does
+    if kubectl get namespace kubelet-density-heavy &> /dev/null; then
+      echo "Namespace 'kubelet-density-heavy' already exists. Deleting it (and all contained resources)..."
+      kubectl delete namespace kubelet-density-heavy
+
+      # Wait for namespace to terminate fully
+      while kubectl get namespace kubelet-density-heavy &> /dev/null; do
+        echo "Waiting for namespace 'kubelet-density-heavy' to be deleted..."
+        sleep 5
+      done
+      echo "Namespace 'kubelet-density-heavy' successfully deleted."
+    fi
+
     # Parse the experiment string to extract the variables
     eval $experiment
 
