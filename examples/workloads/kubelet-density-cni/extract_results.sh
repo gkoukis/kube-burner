@@ -1,56 +1,30 @@
 #!/bin/bash
+set -euo pipefail
 
-# Output file where the results will be saved
-output_file="k3s-calico-cni_summary.txt"
+output_csv="codeco-k8s-multus-flannel-cni-summary.csv"
+echo "File,JobIterations,QPS,Burst,Webserver,Curl,Service,50th,99th,Max,Avg" > "$output_csv"
 
-# Clear the output file if it already exists
-> "$output_file"
-
-# Loop through all the log files
+shopt -s nullglob
 for log_file in kubelet-density-cni_*.log; do
-  # Search for lines containing "ContainersReady 50th:" and append them to the output file
-  grep "ContainersReady 50th:" "$log_file" | while read -r line; do
-    echo "File: $log_file - $line" >> "$output_file"
-  done
+  # Last ContainersReady line (in case there are multiple)
+  line="$(grep -F 'ContainersReady' "$log_file" | tail -n1 || true)"
+  [ -z "$line" ] && continue
+
+  # Params from filename
+  job_iterations=$(echo "$log_file" | grep -oP 'jobIterations\K\d+' || echo "")
+  qps=$(echo "$log_file" | grep -oP 'qps\K\d+' || echo "")
+  burst=$(echo "$log_file" | grep -oP 'burst\K\d+' || echo "")
+  webserver=$(echo "$log_file" | grep -oP 'webserver\K\d+' || echo "")
+  curlp=$(echo "$log_file" | grep -oP 'curl\K\d+' || echo "")
+  service=$(echo "$log_file" | grep -oP 'service\K\d+' || echo "")
+
+  # Metrics (use NA if missing)
+  p50=$(echo "$line" | grep -oP '50th:\s*\K\d+' || true); p50=${p50:-NA}
+  p99=$(echo "$line" | grep -oP '99th:\s*\K\d+' || true); p99=${p99:-NA}
+  maxv=$(echo "$line" | grep -oP 'max:\s*\K\d+' || true); maxv=${maxv:-NA}
+  avg=$(echo "$line" | grep -oP 'avg:\s*\K\d+' || true); avg=${avg:-NA}
+
+  echo "$log_file,$job_iterations,$qps,$burst,$webserver,$curlp,$service,$p50,$p99,$maxv,$avg" >> "$output_csv"
 done
-
-echo "Summary saved to $output_file"
-
-#### ----------------------------
-
-# Input summary file
-input_file=$output_file
-
-# Output CSV file where the results will be saved
-output_csv="k3s-calico-cni_summary.csv"
-
-# Clear the CSV file if it already exists and add the header
-echo "File,JobIterations,QPS,Burst,WebserverReplicas,CurlReplicas,ServiceReplicas,50th,99th,Max,Avg" > "$output_csv"
-
-# Loop through each line in the input summary file
-while IFS= read -r line; do
-  # Extract the file name
-  file_name=$(echo "$line" | grep -oP 'File: \K\S+')
-
-  # Extract job parameters from the file name
-  job_iterations=$(echo "$file_name" | grep -oP 'jobIterations\K\d+')
-  qps=$(echo "$file_name" | grep -oP 'qps\K\d+')
-  burst=$(echo "$file_name" | grep -oP 'burst\K\d+')
-  webserver_replicas=$(echo "$file_name" | grep -oP 'webserver\K\d+')
-  curl_replicas=$(echo "$file_name" | grep -oP 'curl\K\d+')
-  service_replicas=$(echo "$file_name" | grep -oP 'service\K\d+')
-
-  # Extract metrics from the line
-  fiftieth=$(echo "$line" | grep -oP '50th: \K\d+')
-  ninety_ninth=$(echo "$line" | grep -oP '99th: \K\d+')
-  max=$(echo "$line" | grep -oP 'max: \K\d+')
-  avg=$(echo "$line" | grep -oP 'avg: \K\d+')
-
-  # Write the extracted data to the CSV file, ensuring no missing values
-  if [ -n "$fiftieth" ] && [ -n "$ninety_ninth" ] && [ -n "$max" ] && [ -n "$avg" ]; then
-    echo "$file_name,$job_iterations,$qps,$burst,$webserver_replicas,$curl_replicas,$service_replicas,$fiftieth,$ninety_ninth,$max,$avg" >> "$output_csv"
-  fi
-
-done < "$input_file"
 
 echo "Data saved to $output_csv"
