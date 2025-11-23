@@ -7,13 +7,50 @@ iterations=10
 # Experiments configuration (small version)
 # ---------------------------------------------------------------------------
 experiments=(
-  "jobIterations=1 qps=1 burst=1 webserver_replicas=1 curl_replicas=1 service_replicas=1"
-  "jobIterations=1 qps=10 burst=10 webserver_replicas=1 curl_replicas=1 service_replicas=1"
-  "jobIterations=1 qps=25 burst=25 webserver_replicas=1 curl_replicas=1 service_replicas=1"
-  "jobIterations=1 qps=50 burst=50 webserver_replicas=1 curl_replicas=1 service_replicas=1"
-  "jobIterations=1 qps=75 burst=75 webserver_replicas=1 curl_replicas=1 service_replicas=1"
-  "jobIterations=1 qps=100 burst=100 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+  "jobIterations=1 qps=1 burst=1 webserver_replicas=10 curl_replicas=10 service_replicas=1"
+  "jobIterations=1 qps=10 burst=10 webserver_replicas=10 curl_replicas=10 service_replicas=1"
+  "jobIterations=1 qps=25 burst=25 webserver_replicas=10 curl_replicas=10 service_replicas=1"
+  "jobIterations=1 qps=50 burst=50 webserver_replicas=10 curl_replicas=10 service_replicas=1"
+  "jobIterations=1 qps=75 burst=75 webserver_replicas=10 curl_replicas=10 service_replicas=1"
+  "jobIterations=1 qps=100 burst=100 webserver_replicas=10 curl_replicas=10 service_replicas=1"
+  "jobIterations=1 qps=1 burst=1 webserver_replicas=20 curl_replicas=20 service_replicas=1"
+  "jobIterations=1 qps=10 burst=10 webserver_replicas=20 curl_replicas=20 service_replicas=1"
+  "jobIterations=1 qps=25 burst=25 webserver_replicas=20 curl_replicas=20 service_replicas=1"
+  "jobIterations=1 qps=50 burst=50 webserver_replicas=20 curl_replicas=20 service_replicas=1"
+  "jobIterations=1 qps=75 burst=75 webserver_replicas=20 curl_replicas=20 service_replicas=1"
+  "jobIterations=1 qps=100 burst=100 webserver_replicas=20 curl_replicas=20 service_replicas=1"
+  "jobIterations=1 qps=1 burst=1 webserver_replicas=40 curl_replicas=40 service_replicas=1"
+  "jobIterations=1 qps=10 burst=10 webserver_replicas=40 curl_replicas=40 service_replicas=1"
+  "jobIterations=1 qps=25 burst=25 webserver_replicas=40 curl_replicas=40 service_replicas=1"
+  "jobIterations=1 qps=50 burst=50 webserver_replicas=40 curl_replicas=40 service_replicas=1"
+  "jobIterations=1 qps=75 burst=75 webserver_replicas=40 curl_replicas=40 service_replicas=1"
+  "jobIterations=1 qps=100 burst=100 webserver_replicas=40 curl_replicas=40 service_replicas=1"
+#  "jobIterations=1 qps=1 burst=1 webserver_replicas=50 curl_replicas=50 service_replicas=1"
+#  "jobIterations=1 qps=10 burst=10 webserver_replicas=50 curl_replicas=50 service_replicas=1"
+#  "jobIterations=1 qps=25 burst=25 webserver_replicas=50 curl_replicas=50 service_replicas=1"
+#  "jobIterations=1 qps=50 burst=50 webserver_replicas=50 curl_replicas=50 service_replicas=1"
+#  "jobIterations=1 qps=75 burst=75 webserver_replicas=50 curl_replicas=50 service_replicas=1"
+#  "jobIterations=1 qps=100 burst=100 webserver_replicas=50 curl_replicas=50 service_replicas=1"
+#  # Add more experiment combinations as needed
 )
+
+
+## Define the experiments with all metrics
+#experiments=(
+#  "jobIterations=1 qps=1 burst=1 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+#  "jobIterations=1 qps=10 burst=10 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+#  "jobIterations=1 qps=25 burst=25 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+#  "jobIterations=1 qps=50 burst=50 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+#  "jobIterations=1 qps=75 burst=75 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+#  "jobIterations=1 qps=100 burst=100 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+##  "jobIterations=10 qps=1 burst=1 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+##  "jobIterations=10 qps=10 burst=10 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+##  "jobIterations=10 qps=25 burst=25 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+##  "jobIterations=10 qps=50 burst=50 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+##  "jobIterations=10 qps=75 burst=75 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+##  "jobIterations=10 qps=100 burst=100 webserver_replicas=1 curl_replicas=1 service_replicas=1"
+##  # Add more experiment combinations as needed
+#)
 
 # ---------------------------------------------------------------------------
 # Function: HIGH-ACCURACY deletion measurement (ms resolution, 3 decimals)
