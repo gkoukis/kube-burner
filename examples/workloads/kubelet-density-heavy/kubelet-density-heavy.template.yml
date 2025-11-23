@@ -1,6 +1,6 @@
 ---
 global:
-  gc: true
+  gc: false
   measurements:
     - name: podLatency
 

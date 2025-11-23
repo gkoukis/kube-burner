@@ -1,6 +1,6 @@
 ---
 global:
-  gc: true
+  gc: false
   measurements:
     - name: podLatency
 
@@ -14,7 +14,7 @@ jobs:
     waitWhenFinished: true
     podWait: false
     preLoadImages: true
-    preLoadPeriod: 2m
+    preLoadPeriod: 1m
     objects:
 
       - objectTemplate: templates/webserver-deployment.yml
