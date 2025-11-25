@@ -74,12 +74,6 @@ iterations=6
 # "jobIterations=1 qps=50 burst=50 postgres_deploy_replicas=40 app_deploy_replicas=40 postgres_service_replicas=40"
 # "jobIterations=1 qps=75 burst=75 postgres_deploy_replicas=40 app_deploy_replicas=40 postgres_service_replicas=40"
 # "jobIterations=1 qps=100 burst=100 postgres_deploy_replicas=40 app_deploy_replicas=40 postgres_service_replicas=40"
-# "jobIterations=1 qps=1 burst=1 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
-# "jobIterations=1 qps=10 burst=10 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
-# "jobIterations=1 qps=25 burst=25 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
-# "jobIterations=1 qps=50 burst=50 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
-# "jobIterations=1 qps=75 burst=75 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
-# "jobIterations=1 qps=100 burst=100 postgres_deploy_replicas=50 app_deploy_replicas=50 postgres_service_replicas=50"
 # # Add more experiment combinations as needed
 #)
 
