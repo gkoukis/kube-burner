@@ -19,6 +19,36 @@
 # Contributors:
 #      George Koukis - author
 
+
+# This script orchestrates a series of kube-burner "kubelet-density-heavy"
+# experiments to stress the Kubernetes control plane with a realistic
+# service+database micro-workload.
+#
+# For each configured experiment (combination of:
+#   - jobIterations
+#   - QPS / Burst (API rate limiting)
+#   - postgres_deploy_replicas / app_deploy_replicas / postgres_service_replicas),
+# and for each outer run (repeat factor = $iterations), it:
+#
+#   1. Deletes and recreates the namespace "kubelet-density-heavy".
+#   2. Exports the parameters as environment variables and renders
+#      "kubelet-density-heavy.template.yml" -> "kubelet-density-heavy.yml" via envsubst.
+#   3. Runs `kube-burner init -c kubelet-density-heavy.yml`.
+#   4. Renames the kube-burner log to a descriptive filename encoding the parameters.
+#   5. Measures the *deletion time* of all deployments, services, and pods in the
+#      "kubelet-density-heavy" namespace with millisecond resolution, logging
+#      results to "deletion_times.log".
+#
+# The "kubelet-density-heavy" workload creates:
+#   - a PostgreSQL backend deployment,
+#   - a "perfapp" frontend deployment that queries PostgreSQL via a Kubernetes Service,
+# and uses kube-burner/client-go QPS/Burst to control API traffic (token bucket
+# rate limiting).
+#
+# WARNING: This script repeatedly deletes the "kubelet-density-heavy" namespace.
+# Do not use that namespace for anything else.
+
+
 # Define the number of times to repeat the entire set of experiments
 iterations=6
 
