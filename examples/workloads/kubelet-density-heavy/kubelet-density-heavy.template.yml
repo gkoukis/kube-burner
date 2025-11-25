@@ -1,3 +1,4 @@
+## Added replicas variable
 ---
 global:
   gc: false

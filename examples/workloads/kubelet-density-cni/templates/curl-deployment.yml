@@ -1,3 +1,5 @@
+## Added replicas variable - George Koukis
+
 kind: Deployment
 apiVersion: apps/v1
 metadata:

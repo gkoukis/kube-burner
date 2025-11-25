@@ -1,3 +1,5 @@
+## Added replicas variable - George Koukis
+
 kind: Service
 apiVersion: v1
 metadata:

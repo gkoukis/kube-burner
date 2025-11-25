@@ -1,3 +1,5 @@
+## Added replicas variable - George Koukis
+
 ---
 global:
   gc: false
