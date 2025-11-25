@@ -19,6 +19,38 @@
 # Contributors:
 #      George Koukis - author
 
+
+# This script parses kube-burner log files produced by the
+# kubelet-density-heavy experiments and extracts latency metrics
+# from the "ContainersReady" summary line.
+#
+# For each log file matching:
+#   kubelet-density-heavy_*.log
+# it extracts:
+#   - jobIterations
+#   - QPS
+#   - Burst
+#   - postgres_deploy_replicas
+#   - app_deploy_replicas
+#   - postgres_service_replicas
+#
+# using the encoded parameters inside the filename:
+#   kubelet-density-heavy_jobIterations1_qps50_burst50_postgres-deploy1_app1_postgres-service1_3.log
+#
+# From the last "ContainersReady" line, it extracts:
+#   - p50  (50th percentile)
+#   - p99  (99th percentile)
+#   - max
+#   - avg
+#
+# Results are written into a CSV file:
+#   codeco-k8s-multus-flannel-heavy_summary.csv
+#
+# Each CSV row contains:
+#   File,JobIterations,QPS,Burst,PostgresDeploy,App,PostgresService,50th,99th,Max,Avg
+#
+# Empty or missing metrics are recorded as "NA".
+
 set -euo pipefail
 
 output_csv="codeco-k8s-multus-flannel-heavy_summary.csv"
