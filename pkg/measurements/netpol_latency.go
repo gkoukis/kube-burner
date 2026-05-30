@@ -106,6 +106,7 @@ type netpolMetric struct {
 	Name            string        `json:"netpol"`
 	Metadata        any           `json:"metadata,omitempty"`
 	JobName         string        `json:"jobName,omitempty"`
+	ChurnMetric     bool          `json:"churnMetric,omitempty"`
 }
 
 type netpolLatencyMeasurementFactory struct {
@@ -475,6 +476,7 @@ func readTemplate(o config.Object, embedCfg *fileutils.EmbedConfiguration) ([]by
 	if err != nil {
 		log.Fatalf("Error reading template %s: %s", o.ObjectTemplate, err)
 	}
+	defer f.Close()
 	t, err := io.ReadAll(f)
 	if err != nil {
 		log.Fatalf("Error reading template %s: %s", o.ObjectTemplate, err)
@@ -527,7 +529,7 @@ func (n *netpolLatency) Start(measurementWg *sync.WaitGroup) error {
 	}
 	_, err = n.ClientSet.CoreV1().Pods(networkPolicyProxy).Get(context.TODO(), networkPolicyProxy, metav1.GetOptions{})
 	if err != nil {
-		err = deployPodInNamespace(n.ClientSet, networkPolicyProxy, networkPolicyProxy, "quay.io/cloud-bulldozer/netpolproxy:latest", nil)
+		err = DeployPodInNamespace(n.ClientSet, networkPolicyProxy, networkPolicyProxy, "quay.io/cloud-bulldozer/netpolproxy:latest", nil)
 		if err != nil {
 			return err
 		}
@@ -581,43 +583,32 @@ func (n *netpolLatency) Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer func() {
 		cancel()
-		n.stopWatchers()
 	}()
 	kutil.CleanupNamespacesByLabel(ctx, n.ClientSet, fmt.Sprintf("kubernetes.io/metadata.name=%s", networkPolicyProxy))
-	n.normalizeMetrics()
-	for _, q := range n.LatencyQuantiles {
-		pq := q.(metrics.LatencyQuantiles)
-		// Divide nanoseconds by 1e6 to get milliseconds
-		log.Infof("%s: %s 50th: %d 99th: %d max: %d avg: %d", n.JobConfig.Name, pq.QuantileName, pq.P50, pq.P99, pq.Max, pq.Avg)
-
-	}
-	return nil
+	return n.StopMeasurement(n.normalizeMetrics, n.getLatency)
 }
 
-func (n *netpolLatency) normalizeMetrics() {
+func (n *netpolLatency) normalizeMetrics() float64 {
 	var latencies []float64
 	var minLatencies []float64
 	sLen := 0
 	n.Metrics.Range(func(key, value any) bool {
 		sLen++
 		metric := value.(netpolMetric)
+		metric.ChurnMetric = n.IsChurnMetric(metric.Timestamp)
 		latencies = append(latencies, float64(metric.ReadyLatency))
 		minLatencies = append(minLatencies, float64(metric.MinReadyLatency))
 		n.NormLatencies = append(n.NormLatencies, metric)
 		return true
 	})
-	calcSummary := func(name string, inputLatencies []float64) metrics.LatencyQuantiles {
-		latencySummary := metrics.NewLatencySummary(inputLatencies, name)
-		latencySummary.UUID = n.Uuid
-		latencySummary.Timestamp = time.Now().UTC()
-		latencySummary.Metadata = n.Metadata
-		latencySummary.MetricName = netpolLatencyQuantilesMeasurement
-		latencySummary.JobName = n.JobConfig.Name
-		return latencySummary
-	}
-	if sLen > 0 {
-		n.LatencyQuantiles = append(n.LatencyQuantiles, calcSummary("Ready", latencies))
-		n.LatencyQuantiles = append(n.LatencyQuantiles, calcSummary("minReady", minLatencies))
+	return 0.0
+}
+
+func (n *netpolLatency) getLatency(normLatency any) map[string]float64 {
+	netpolMetric := normLatency.(netpolMetric)
+	return map[string]float64{
+		"Ready":    float64(netpolMetric.ReadyLatency),
+		"MinReady": float64(netpolMetric.MinReadyLatency),
 	}
 }
 

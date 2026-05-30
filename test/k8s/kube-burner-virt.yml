@@ -27,7 +27,6 @@ metricsEndpoints:
   - endpoint: http://localhost:9090
     indexer: 
       type: local
-      metricsDirectory: {{ .METRICS_FOLDER }}
     metrics: [metrics-profile.yaml]
 {{ if .ALERTING }}
     alerts: [alerts.yml]
@@ -50,8 +49,8 @@ jobs:
     podWait: false
     maxWaitTimeout: 1h   
     cleanup: true
-    preLoadImages: true
-    preLoadPeriod: 2s
+    preLoadImages: false
+    preLoadPeriod: 5m
     objects:
 
     - objectTemplate: objectTemplates/vm-ephemeral.yml

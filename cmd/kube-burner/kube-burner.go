@@ -117,12 +117,14 @@ func initCmd() *cobra.Command {
 			if err != nil {
 				log.Fatalf("Error reading configuration file %s: %s", configFile, err)
 			}
-			var userDataFileReader io.Reader
+			defer configFileReader.Close()
+			var userDataFileReader io.ReadCloser
 			if userDataFile != "" {
 				userDataFileReader, err = fileutils.GetWorkloadReader(userDataFile, nil)
 				if err != nil {
 					log.Fatalf("Error reading user data file %s: %s", userDataFile, err)
 				}
+				defer userDataFileReader.Close()
 			}
 			configSpec, err := config.ParseWithUserdata(uuid, timeout, configFileReader, userDataFileReader, allowMissingKeys, nil, setVars)
 			if err != nil {
@@ -216,12 +218,14 @@ func destroyCmd() *cobra.Command {
 			if err != nil {
 				log.Fatalf("Error reading configuration file %s: %s", configFile, err)
 			}
-			var userDataFileReader io.Reader
+			defer configFileReader.Close()
+			var userDataFileReader io.ReadCloser
 			if userDataFile != "" {
 				userDataFileReader, err = fileutils.GetWorkloadReader(userDataFile, nil)
 				if err != nil {
 					log.Fatalf("Error reading user data file %s: %s", userDataFile, err)
 				}
+				defer userDataFileReader.Close()
 			}
 			configSpec, err := config.ParseWithUserdata(uuid, timeout, configFileReader, userDataFileReader, true, nil, nil)
 			if err != nil {
@@ -275,7 +279,7 @@ func measureCmd() *cobra.Command {
 			if err != nil {
 				log.Fatalf("Error reading configuration file %s: %s", configFile, err)
 			}
-			configSpec, err := config.Parse(configFile, time.Hour, f)
+			configSpec, err := config.Parse(uuid, time.Hour, f)
 			if err != nil {
 				log.Fatal(err.Error())
 			}
@@ -334,6 +338,7 @@ func indexCmd() *cobra.Command {
 	var skipTLSVerify, skipLogFile bool
 	var prometheusStep time.Duration
 	var tarballName string
+	var indexerType string
 	var indexer config.MetricsEndpoint
 	cmd := &cobra.Command{
 		Use:   "index",
@@ -371,13 +376,19 @@ func indexCmd() *cobra.Command {
 					Servers: []string{esServer},
 					Index:   esIndex,
 				}
-			} else {
+			} else if indexerType == string(indexers.TSDBIndexer) {
 				indexer.IndexerConfig = indexers.IndexerConfig{
-					Type:             indexers.LocalIndexer,
+					Type:             indexers.TSDBIndexer,
 					MetricsDirectory: metricsDirectory,
 					TarballName:      tarballName,
 				}
+			} else {
+				indexer.IndexerConfig = indexers.IndexerConfig{
+					Type:        indexers.LocalIndexer,
+					TarballName: tarballName,
+				}
 			}
+			indexer.MetricsDirectory = metricsDirectory
 			configSpec.MetricsEndpoints = append(configSpec.MetricsEndpoints, indexer)
 			metricsScraper := metrics.ProcessMetricsScraperConfig(metrics.ScraperConfig{
 				ConfigSpec:      &configSpec,
@@ -396,7 +407,7 @@ func indexCmd() *cobra.Command {
 					log.Fatal(err)
 				}
 			}
-			if configSpec.MetricsEndpoints[0].Type == indexers.LocalIndexer && tarballName != "" {
+			if (configSpec.MetricsEndpoints[0].Type == indexers.LocalIndexer || configSpec.MetricsEndpoints[0].Type == indexers.TSDBIndexer) && tarballName != "" {
 				if err := metrics.CreateTarball(configSpec.MetricsEndpoints[0].IndexerConfig); err != nil {
 					log.Fatal(err)
 				}
@@ -416,10 +427,11 @@ func indexCmd() *cobra.Command {
 	cmd.Flags().Int64VarP(&end, "end", "", time.Now().Unix(), "Epoch end time")
 	cmd.Flags().StringVarP(&jobName, "job-name", "j", "kube-burner-indexing", "Indexing job name")
 	cmd.Flags().StringVar(&userMetadata, "user-metadata", "", "User provided metadata file, in YAML format")
-	cmd.Flags().StringVar(&metricsDirectory, "metrics-directory", "collected-metrics", "Directory to dump the metrics files in, when using default local indexing")
+	cmd.Flags().StringVar(&metricsDirectory, "metrics-directory", "collected-metrics-{{.UUID}}", "Directory to dump the metrics files in, when using default local indexing")
 	cmd.Flags().StringVar(&esServer, "es-server", "", "Elastic Search endpoint")
 	cmd.Flags().StringVar(&esIndex, "es-index", "", "Elastic Search index")
 	cmd.Flags().StringVar(&tarballName, "tarball-name", "", "Dump collected metrics into a tarball with the given name, requires local indexing")
+	cmd.Flags().StringVar(&indexerType, "indexer-type", "local", "Indexer type: local (JSON files) or tsdb (Prometheus TSDB blocks)")
 	cmd.Flags().BoolVar(&skipLogFile, "skip-log-file", false, "Skip writing to a log file")
 	cmd.Flags().SortFlags = false
 	return cmd

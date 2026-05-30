@@ -63,6 +63,7 @@ type NodeMetric struct {
 	JobName                   string            `json:"jobName,omitempty"`
 	Name                      string            `json:"nodeName"`
 	Labels                    map[string]string `json:"labels"`
+	ChurnMetric               bool              `json:"churnMetric,omitempty"`
 	Metadata                  any               `json:"metadata,omitempty"`
 }
 
@@ -95,14 +96,13 @@ func (n *nodeLatency) handleCreateNode(obj any) {
 		log.Errorf("failed to convert to Node: %v", err)
 		return
 	}
-	labels := node.Labels
 	n.Metrics.LoadOrStore(string(node.UID), NodeMetric{
 		Timestamp:  node.CreationTimestamp.UTC(),
 		Name:       node.Name,
 		MetricName: nodeLatencyMeasurement,
 		UUID:       n.Uuid,
 		JobName:    n.JobConfig.Name,
-		Labels:     labels,
+		Labels:     util.NormalizeLabels(node.Labels),
 		Metadata:   n.Metadata,
 	})
 }
@@ -204,7 +204,7 @@ func (n *nodeLatency) Collect(measurementWg *sync.WaitGroup) {
 			NodePIDPressure:    nodePIDPressure,
 			NodeReady:          nodeReady,
 			JobName:            n.JobConfig.Name,
-			Labels:             node.Labels,
+			Labels:             util.NormalizeLabels(node.Labels),
 		})
 	}
 }
@@ -235,6 +235,7 @@ func (n *nodeLatency) normalizeLatencies() float64 {
 		m.NodeDiskPressureLatency = int(m.NodeDiskPressure.Sub(earliest).Milliseconds())
 		m.NodePIDPressureLatency = int(m.NodePIDPressure.Sub(earliest).Milliseconds())
 		m.NodeReadyLatency = int(m.NodeReady.Sub(earliest).Milliseconds())
+		m.ChurnMetric = n.IsChurnMetric(m.Timestamp)
 		n.NormLatencies = append(n.NormLatencies, m)
 		return true
 	})

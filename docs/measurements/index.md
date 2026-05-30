@@ -402,7 +402,6 @@ Where `quantileName` matches with the node conditions and can be:
 And the metrics, error rates, and their thresholds work the same way as in the pod latency measurement.
 
 ## PVC latency
-Note: This measurement is not supported for patch, read and delete jobs. Because it requires all the events from creation to reaching a stable end state to happen during a job.
 
 Collects latencies from different pvc phases on the cluster, these **latency metrics are in ms**. It can be enabled with:
 
@@ -423,6 +422,8 @@ One document, such as the following, is indexed per each pvc created by the work
   "pendingLatency": 37,
   "bindingLatency": 4444,
   "lostLatency": 0,
+  "resizeLatency": 1234,
+  "resizedCapacity": "2Gi",
   "uuid": "1f16ffd1-ac65-47c4-970f-a71d5f309cf5",
   "pvcName": "deployment-pvc-move-1",
   "jobName": "pvc-move",
@@ -431,7 +432,7 @@ One document, such as the following, is indexed per each pvc created by the work
   "size": "1Gi",
   "storageClass": "gp3-csi",
   "jobIteration": 0,
-  "replica": 1,
+  "replica": 1
 }
 ```
 
@@ -478,6 +479,19 @@ PVC latency quantile sample:
     "avg": 37,
     "timestamp": "2025-01-10T02:51:04.611062824Z",
     "metricName": "pvcLatencyQuantilesMeasurement",
+    "jobName": "pvc-move"
+  },
+  {
+    "quantileName": "Resize",
+    "uuid": "1f16ffd1-ac65-47c4-970f-a71d5f309cf5",
+    "P99": 0,
+    "P95": 0,
+    "P50": 0,
+    "min": 0,
+    "max": 0,
+    "avg": 0,
+    "timestamp": "2025-01-10T02:51:04.611063999Z",
+    "metricName": "pvcLatencyQuantilesMeasurement",
     "jobName": "pvc-move",
   }
 ]
@@ -488,6 +502,7 @@ Where `quantileName` matches with the pvc phases and can be:
 - `Pending`: Indicates that PVC is not yet bound.
 - `Bound`: Indicates that PVC is bound.
 - `Lost`: Indicates that the PVC has lost their underlying PersistentVolume.
+- `Resize`: Indicates that the PVC has been resized.
 
 !!! info
     More information about the PVC phases can be found at the [kubernetes api documentation](https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolumeClaimPhase).
@@ -1002,7 +1017,8 @@ And the quantiles document has the structure:
 
 ## pprof collection
 
-This measurement can be used to collect Golang profiling information from processes running in pods from the cluster. To do so, kube-burner connects to pods labeled with `labelSelector` and running in `namespace`. This measurement uses an implementation similar to `kubectl exec`, and as soon as it connects to one pod it executes the command `curl <pprofURL>` to get the pprof data. pprof files are collected in a regular basis configured by the parameter `pprofInterval`, the collected pprof files are downloaded from the pods to the local directory configured by the parameter `pprofDirectory`, by default is `pprof`.
+This measurement can be used to collect Golang profiling information from processes running in the cluster. To do so, kube-burner connects to pods labeled with `labelSelector` and running in `namespace`. This measurement uses an implementation similar to `kubectl exec`, and as soon as it connects to one pod it executes the command `curl <pprofURL>` to get the pprof data.
+Profiling information is collected when the measurement starts and stops, but it's possible to collect it in a regular basis by setting the parameter `pprofInterval`. The collected pprof files are downloaded from the pods to the local directory configured by the parameter `pprofDirectory`, by default is `pprof`.
 
 As some components require authentication to get profiling information, `kube-burner` provides two different modalities to address it:
 
@@ -1021,7 +1037,6 @@ An example of how to configure this measurement to collect pprof HEAP and CPU pr
 ```yaml
   measurements:
   - name: pprof
-    pprofInterval: 30m
     pprofDirectory: pprof-data
     pprofTargets:
     - name: kube-apiserver-heap

@@ -64,7 +64,7 @@ func (i *MetricsEndpoint) UnmarshalYAML(unmarshal func(any) error) error {
 	indexer := rawIndexer{
 		IndexerConfig: indexers.IndexerConfig{
 			InsecureSkipVerify: false,
-			MetricsDirectory:   "collected-metrics",
+			MetricsDirectory:   "collected-metrics-{{.UUID}}",
 			TarballName:        "kube-burner-metrics.tgz",
 		},
 		SkipTLSVerify: true,
@@ -94,9 +94,10 @@ func (c *ChurnConfig) UnmarshalYAML(unmarshal func(any) error) error {
 func (o *Object) UnmarshalYAML(unmarshal func(any) error) error {
 	type rawObject Object
 	object := rawObject{
-		Wait:     true,
-		Churn:    true,
-		Replicas: 1,
+		Wait:                   true,
+		Churn:                  true,
+		Replicas:               1,
+		RepeatEveryNIterations: 1,
 	}
 	if err := unmarshal(&object); err != nil {
 		return err
@@ -133,7 +134,7 @@ func (j *Job) UnmarshalYAML(unmarshal func(any) error) error {
 		JobType:                CreationJob,
 		WaitForDeletion:        true,
 		PreLoadImages:          true,
-		PreLoadPeriod:          1 * time.Minute,
+		PreLoadPeriod:          10 * time.Minute,
 		MetricsClosing:         AfterJobPause,
 		Measurements:           []mtypes.Measurement{},
 	}
@@ -260,6 +261,8 @@ func ParseWithUserdata(uuid string, timeout time.Duration, configFileReader, use
 	}
 
 	inputData, err := getInputData(userDataFileReader, additionalVars)
+	inputData["UUID"] = uuid
+	configSpec.GlobalConfig.UUID = uuid
 	if err != nil {
 		return configSpec, err
 	}
@@ -296,6 +299,12 @@ func ParseWithUserdata(uuid string, timeout time.Duration, configFileReader, use
 	if err := validateGC(); err != nil {
 		return configSpec, err
 	}
+	if err := validateRepeatEveryNIterations(); err != nil {
+		return configSpec, err
+	}
+	if err := HookBeforeWorkload(); err != nil {
+		return configSpec, err
+	}
 	for i, job := range configSpec.Jobs {
 		if len(job.Namespace) > 62 {
 			log.Warnf("Namespace %s length has > 62 characters, truncating it", job.Namespace)
@@ -312,7 +321,6 @@ func ParseWithUserdata(uuid string, timeout time.Duration, configFileReader, use
 		}
 	}
 	configSpec.GlobalConfig.Timeout = timeout
-	configSpec.GlobalConfig.UUID = uuid
 	configSpec.GlobalConfig.RUNID = uid.NewString()
 	return configSpec, nil
 }
@@ -423,6 +431,33 @@ func jobIsDuped() error {
 	return nil
 }
 
+func HookBeforeWorkload() error {
+	validWhen := map[JobHook]bool{
+		HookBeforeJobExecution: true,
+		HookAfterJobExecution:  true,
+		HookBeforeChurn:        true,
+		HookAfterChurn:         true,
+		HookBeforeCleanup:      true,
+		HookAfterCleanup:       true,
+		HookBeforeGC:           true,
+		HookAfterGC:            true,
+		HookOnEachIteration:    true,
+	}
+
+	for _, job := range configSpec.Jobs {
+		for i, hook := range job.Hooks {
+			if !validWhen[hook.When] {
+				return fmt.Errorf("unsupported when value in %s hook %d: %s, (supported: %v)", job.Name, i, hook.When, maps.Keys(validWhen))
+			}
+			if len(hook.Cmd) == 0 {
+				return fmt.Errorf("hook %d in job %s has empty command", i, job.Name)
+			}
+		}
+	}
+
+	return nil
+}
+
 // validateGC checks if GC and global waitWhenFinished are enabled at the same time
 func validateGC() error {
 	if !configSpec.GlobalConfig.WaitWhenFinished {
@@ -431,6 +466,31 @@ func validateGC() error {
 	for _, job := range configSpec.Jobs {
 		if job.GC {
 			return fmt.Errorf("jobs GC and global waitWhenFinished cannot be enabled at the same time")
+		}
+	}
+	return nil
+}
+
+// validateRepeatEveryNIterations checks that:
+// 1. All objects in a job have consistent RepeatEveryNIterations values (all =1 or all same non-1 value)
+// 2. RepeatEveryNIterations > 1 is not used with object-based churn mode
+func validateRepeatEveryNIterations() error {
+	for _, job := range configSpec.Jobs {
+		var nonDefaultValue int
+		for _, obj := range job.Objects {
+			if obj.RepeatEveryNIterations > 1 {
+				if nonDefaultValue == 0 {
+					nonDefaultValue = obj.RepeatEveryNIterations
+				} else if obj.RepeatEveryNIterations != nonDefaultValue {
+					return fmt.Errorf("job %s: inconsistent RepeatEveryNIterations values. Found both %d and %d. All objects must have RepeatEveryNIterations=1 or the same non-1 value",
+						job.Name, nonDefaultValue, obj.RepeatEveryNIterations)
+				}
+			}
+		}
+		// Check that RepeatEveryNIterations > 1 is not used with object-based churn
+		if nonDefaultValue > 1 && IsChurnEnabled(job) && job.ChurnConfig.Mode == ChurnObjects {
+			return fmt.Errorf("job %s: repeatEveryNIterations > 1 cannot be used with churn mode 'objects'. Use churn mode 'namespaces' instead",
+				job.Name)
 		}
 	}
 	return nil

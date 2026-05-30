@@ -43,6 +43,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 )
 
@@ -51,8 +52,87 @@ type churnDeletedObject struct {
 	gvr    schema.GroupVersionResource
 }
 
+// clusterScopedObjectCache holds pre-loaded cluster-scoped objects grouped by iteration
+type clusterScopedObjectCache struct {
+	obj              *object
+	itemsByIteration map[int][]unstructured.Unstructured
+}
+
+// preloadClusterScopedObjects lists all cluster-scoped objects once and groups them by iteration.
+// This avoids repeated List calls during each churn cycle.
+func (ex *JobExecutor) preloadClusterScopedObjects(ctx context.Context) []clusterScopedObjectCache {
+	caches := make([]clusterScopedObjectCache, 0)
+
+	for _, obj := range ex.objects {
+		if obj.namespaced {
+			continue
+		}
+
+		labelSelector := fmt.Sprintf("%s=%s,%s=%s",
+			config.KubeBurnerLabelJob, ex.Name,
+			config.KubeBurnerLabelUUID, ex.uuid)
+
+		resources, err := ex.dynamicClient.Resource(obj.gvr).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
+		if err != nil {
+			log.Errorf("Error listing cluster-scoped objects %s: %v", obj.ObjectTemplate, err)
+			continue
+		}
+
+		// Group by job-iteration label (handles replicas automatically)
+		itemsByIteration := make(map[int][]unstructured.Unstructured)
+		for _, item := range resources.Items {
+			iterLabel := item.GetLabels()[config.KubeBurnerLabelJobIteration]
+			iter, _ := strconv.Atoi(iterLabel)
+			itemsByIteration[iter] = append(itemsByIteration[iter], item)
+		}
+
+		caches = append(caches, clusterScopedObjectCache{
+			obj:              obj,
+			itemsByIteration: itemsByIteration,
+		})
+	}
+
+	return caches
+}
+
+// deleteClusterScopedObjects marks cluster-scoped objects in the given iteration range
+// with a deletion label, deletes them using CleanupNonNamespacedResourcesByLabel,
+// and returns the list of deleted objects for verification.
+func (ex *JobExecutor) deleteClusterScopedObjects(ctx context.Context, caches []clusterScopedObjectCache, iterationStart, iterationEnd int) []churnDeletedObject {
+	delPatch := []byte(fmt.Sprintf(`{"metadata":{"labels":{"%s":""}}}`, config.KubeBurnerLabelChurnDelete))
+	var deletedObjects []churnDeletedObject
+
+	for _, cache := range caches {
+		resourceInterface := ex.dynamicClient.Resource(cache.obj.gvr)
+
+		for i := iterationStart; i < iterationEnd; i++ {
+			if i%cache.obj.RepeatEveryNIterations == 0 {
+				items, exists := cache.itemsByIteration[i]
+				if !exists {
+					continue
+				}
+				for idx := range items {
+					item := &items[idx]
+					_, err := resourceInterface.Patch(ctx, item.GetName(), types.MergePatchType, delPatch, metav1.PatchOptions{})
+					if err != nil {
+						log.Errorf("Error applying deletion label to %s %s: %v", cache.obj.Kind, item.GetName(), err)
+					} else {
+						deletedObjects = append(deletedObjects, churnDeletedObject{
+							object: item,
+							gvr:    cache.obj.gvr,
+						})
+					}
+				}
+			}
+		}
+
+		CleanupNonNamespacedResourcesByLabel(ctx, *ex, cache.obj, config.KubeBurnerLabelChurnDelete)
+	}
+	return deletedObjects
+}
+
 func (ex *JobExecutor) setupCreateJob() {
-	var f io.Reader
+	var f io.ReadCloser
 	var err error
 	log.Debugf("Preparing create job: %s", ex.Name)
 	for _, o := range ex.Objects {
@@ -65,6 +145,7 @@ func (ex *JobExecutor) setupCreateJob() {
 		if err != nil {
 			log.Fatalf("Error reading template %s: %s", o.ObjectTemplate, err)
 		}
+		defer f.Close()
 		t, err := io.ReadAll(f)
 		if err != nil {
 			log.Fatalf("Error reading template %s: %s", o.ObjectTemplate, err)
@@ -118,6 +199,7 @@ func (ex *JobExecutor) RunCreateJob(ctx context.Context, iterationStart, iterati
 	var ns string
 	var waitErrors []error
 	var namespacesWaited = make(map[string]bool)
+	var hookErrors []error
 	maps.Copy(nsLabels, ex.NamespaceLabels)
 	maps.Copy(nsAnnotations, ex.NamespaceAnnotations)
 	if ex.nsRequired && !ex.NamespacedIterations {
@@ -126,7 +208,12 @@ func (ex *JobExecutor) RunCreateJob(ctx context.Context, iterationStart, iterati
 	// We have to sum 1 since the iterations start from 1
 	iterationProgress := (iterationEnd - iterationStart) / 10
 	percent := 1
+
 	for i := iterationStart; i < iterationEnd; i++ {
+		// Execute onEachIteration hooks
+		if ex.executeHooksForJobStage(config.HookOnEachIteration, &hookErrors, nil); len(hookErrors) > 0 {
+			log.Errorf("%v", hookErrors)
+		}
 		if ctx.Err() != nil {
 			return []error{ctx.Err()}
 		}
@@ -164,6 +251,13 @@ func (ex *JobExecutor) RunCreateJob(ctx context.Context, iterationStart, iterati
 					log.Debugf("RunOnce set to %s, so creating object once", obj.ObjectTemplate)
 					ex.replicaHandler(ctx, kbLabels, obj, ns, i, &wg)
 				}
+			} else if obj.RepeatEveryNIterations > 1 {
+				// Only create when iteration is a multiple of RepeatEveryNIterations
+				if i%obj.RepeatEveryNIterations == 0 {
+					log.Debugf("RepeatEveryNIterations=%d: creating %s at iteration %d",
+						obj.RepeatEveryNIterations, obj.ObjectTemplate, i)
+					ex.replicaHandler(ctx, kbLabels, obj, ns, i, &wg)
+				}
 			} else {
 				ex.replicaHandler(ctx, kbLabels, obj, ns, i, &wg)
 			}
@@ -172,7 +266,7 @@ func (ex *JobExecutor) RunCreateJob(ctx context.Context, iterationStart, iterati
 			if !ex.NamespacedIterations || !namespacesWaited[ns] {
 				log.Infof("Waiting up to %s for actions to be completed in namespace %s", ex.MaxWaitTimeout, ns)
 				wg.Wait()
-				if errs := ex.waitForObjects(ns); errs != nil {
+				if errs := ex.waitForObjects(ctx, ns); errs != nil {
 					waitErrors = append(waitErrors, errs...)
 				}
 				namespacesWaited[ns] = true
@@ -186,7 +280,7 @@ func (ex *JobExecutor) RunCreateJob(ctx context.Context, iterationStart, iterati
 	// Wait for all replicas to be created
 	wg.Wait()
 	if ex.WaitWhenFinished {
-		if errs := ex.waitForCompletion(iterationStart, iterationEnd, ns, namespacesWaited); len(errs) > 0 {
+		if errs := ex.waitForCompletion(ctx, iterationStart, iterationEnd, ns, namespacesWaited); len(errs) > 0 {
 			waitErrors = append(waitErrors, errs...)
 		}
 	}
@@ -213,10 +307,12 @@ func (ex *JobExecutor) replicaHandler(ctx context.Context, labels map[string]str
 		maps.Copy(copiedLabels, labels)
 		copiedLabels[config.KubeBurnerLabelReplica] = strconv.Itoa(r)
 
+		if err := ex.limiter.Wait(ctx); err != nil {
+			return
+		}
 		wg.Add(1)
 		go func(r int) {
 			defer wg.Done()
-			ex.limiter.Wait(context.TODO())
 			newObjects, gvks := ex.renderTemplateForObjectMultiple(obj, iteration, r)
 			newObject := newObjects[obj.documentIndex]
 			gvk := gvks[obj.documentIndex]
@@ -256,7 +352,7 @@ func (ex *JobExecutor) replicaHandler(ctx context.Context, labels map[string]str
 }
 
 // waitForCompletion waits for objects to be ready across the relevant namespaces
-func (ex *JobExecutor) waitForCompletion(iterationStart, iterationEnd int, ns string, namespacesWaited map[string]bool) []error {
+func (ex *JobExecutor) waitForCompletion(ctx context.Context, iterationStart, iterationEnd int, ns string, namespacesWaited map[string]bool) []error {
 	log.Infof("Waiting up to %s for actions to be completed", ex.MaxWaitTimeout)
 	// This semaphore limits the maximum number of concurrent goroutines
 	sem := make(chan int, int(ex.restConfig.QPS))
@@ -277,7 +373,7 @@ func (ex *JobExecutor) waitForCompletion(iterationStart, iterationEnd int, ns st
 				<-sem
 				wg.Done()
 			}()
-			if err := ex.waitForObjects(namespace); err != nil {
+			if err := ex.waitForObjects(ctx, namespace); err != nil {
 				select {
 				case errChan <- err:
 				default:
@@ -311,20 +407,15 @@ func (ex *JobExecutor) createRequest(ctx context.Context, gvr schema.GroupVersio
 		if ctx.Err() != nil {
 			return true, err
 		}
+		atomic.AddInt32(&ex.objectOperations, 1)
 		// When the object has a namespace already specified, use it
 		if objNs := obj.GetNamespace(); objNs != "" {
 			ns = objNs
 		}
 		if ns != "" {
-			uns, err = ex.dynamicClient.Resource(gvr).Namespace(ns).Create(context.TODO(), obj, metav1.CreateOptions{})
+			uns, err = ex.dynamicClient.Resource(gvr).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{})
 		} else {
-			if !ex.nsChurning {
-				uns, err = ex.dynamicClient.Resource(gvr).Create(context.TODO(), obj, metav1.CreateOptions{})
-			} else {
-				// Skip non-namespaced objects during namespace churning - they won't be deleted with the namespace
-				log.Debugf("Skipping non-namespaced object %s/%s during namespace churning", obj.GetKind(), obj.GetName())
-				return true, nil
-			}
+			uns, err = ex.dynamicClient.Resource(gvr).Create(ctx, obj, metav1.CreateOptions{})
 		}
 		if err != nil {
 			if kerrors.IsUnauthorized(err) {
@@ -349,7 +440,6 @@ func (ex *JobExecutor) createRequest(ctx context.Context, gvr schema.GroupVersio
 			log.Error("Retrying object creation")
 			return false, nil
 		}
-		atomic.AddInt32(&ex.objectOperations, 1)
 		if ns != "" {
 			log.Debugf("Created %s/%s in namespace %s", uns.GetKind(), uns.GetName(), ns)
 		} else {
@@ -374,6 +464,7 @@ func (ex *JobExecutor) createNamespace(ns string, nsLabels, nsAnnotations map[st
 func (ex *JobExecutor) RunCreateJobWithChurn(ctx context.Context) []error {
 	// Cleanup namespaces based on the labels we added to the objects
 	log.Infof("Churning mode: %s", ex.ChurnConfig.Mode)
+	var hookErrors []error
 	switch ex.ChurnConfig.Mode {
 	case config.ChurnNamespaces:
 		ex.nsChurning = true // Enable namespace churning flag to prevent non namespaced objects to be churned
@@ -384,6 +475,10 @@ func (ex *JobExecutor) RunCreateJobWithChurn(ctx context.Context) []error {
 		return ex.churnNamespaces(ctx)
 	case config.ChurnObjects:
 		ex.churnObjects(ctx)
+	}
+	// Execute afterChurn hooks
+	if ex.executeHooksForJobStage(config.HookAfterChurn, &hookErrors, nil); len(hookErrors) > 0 {
+		log.Errorf("%v", hookErrors)
 	}
 	return nil
 }
@@ -408,6 +503,24 @@ func (ex *JobExecutor) churnNamespaces(ctx context.Context) []error {
 	}
 	numToChurn := int(math.Max(float64(ex.ChurnConfig.Percent*len(jobNamespaces.Items)/100), 1))
 
+	// Pre-load cluster-scoped objects once before the churn loop
+	clusterScopedCaches := ex.preloadClusterScopedObjects(ctx)
+	repeatEveryNIterations := 1
+	for _, obj := range ex.objects {
+		if obj.RepeatEveryNIterations > repeatEveryNIterations {
+			repeatEveryNIterations = obj.RepeatEveryNIterations
+			break
+		}
+	}
+	// Align numToChurn to RepeatEveryNIterations boundary.
+	if repeatEveryNIterations > 1 {
+		numToChurn = ((numToChurn + repeatEveryNIterations - 1) / repeatEveryNIterations) * repeatEveryNIterations
+		if numToChurn > len(nsList) {
+			numToChurn = (len(nsList) / repeatEveryNIterations) * repeatEveryNIterations
+		}
+		log.Debugf("Aligned numToChurn to %d (maxRepeatEveryNIterations=%d)", numToChurn, repeatEveryNIterations)
+	}
+
 	for {
 		var randStart int
 		if ex.ChurnConfig.Duration > 0 {
@@ -425,8 +538,15 @@ func (ex *JobExecutor) churnNamespaces(ctx context.Context) []error {
 			return errs
 		}
 
-		// Max amount of churn is 100% of namespaces
-		if len(nsList)-numToChurn+1 > 0 {
+		// Align randStart to repeatEveryNIterations boundaries for proper shared object handling.
+		if repeatEveryNIterations > 1 {
+			// Calculate number of valid starting positions (aligned to repeatEveryNIterations)
+			maxValidStart := len(nsList) - numToChurn
+			numValidPositions := (maxValidStart / repeatEveryNIterations) + 1
+			if numValidPositions > 0 {
+				randStart = rand.Intn(numValidPositions) * repeatEveryNIterations
+			}
+		} else if len(nsList)-numToChurn+1 > 0 {
 			randStart = rand.Intn(len(nsList) - numToChurn + 1)
 		}
 		// We need to perform a natural sort
@@ -448,7 +568,15 @@ func (ex *JobExecutor) churnNamespaces(ctx context.Context) []error {
 		}
 		// 1 hour timeout to delete namespace
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Hour)
+		// Delete shared cluster-scoped objects that serve the churned namespaces
+		// Some cluster-scoped objects need to be deleted in parallel with the namespaces, so we verify them only after namespace deletion
+		deletedObjects := ex.deleteClusterScopedObjects(cleanupCtx, clusterScopedCaches, randStart, numToChurn+randStart)
 		util.CleanupNamespacesByLabel(cleanupCtx, ex.clientSet, config.KubeBurnerLabelChurnDelete)
+		ex.verifyDelete(ctx, deletedObjects)
+		if ex.ChurnConfig.DeleteDelay > 0 {
+			log.Infof("Sleeping for %v after deletion", ex.ChurnConfig.DeleteDelay)
+			time.Sleep(ex.ChurnConfig.DeleteDelay)
+		}
 		// Re-create objects that were deleted
 		log.Infof("Re-creating %d deleted namespaces", numToChurn)
 		if jobErrs := ex.RunCreateJob(cleanupCtx, randStart, numToChurn+randStart); jobErrs != nil {
@@ -467,6 +595,7 @@ func (ex *JobExecutor) churnObjects(ctx context.Context) {
 	now := time.Now().UTC()
 	var objectList *unstructured.UnstructuredList
 	var err error
+	var wg sync.WaitGroup
 	for {
 		deletedObjects := []churnDeletedObject{}
 		if ex.ChurnConfig.Duration > 0 {
@@ -483,42 +612,69 @@ func (ex *JobExecutor) churnObjects(ctx context.Context) {
 			log.Infof("Reached specified number of churn cycles (%d), stopping churn job", ex.ChurnConfig.Cycles)
 			return
 		}
-		log.Infof("Deleting objects")
+		log.Infof("Deleting objects in churn cycle %d", cyclesCount)
 		for _, obj := range ex.objects {
-			// if churning is enabled in the object
+			// if churning is enabled for the object
 			if obj.Churn {
 				labelSelector := obj.LabelSelector
 				// Remove these labels to list all objects
 				delete(labelSelector, config.KubeBurnerLabelJobIteration)
 				delete(labelSelector, config.KubeBurnerLabelReplica)
-				objectList, err = ex.dynamicClient.Resource(obj.gvr).Namespace(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
-					LabelSelector: labels.FormatLabels(labelSelector),
-				})
+				log.Debugf("Listing %s with label selector: %s", obj.gvr.Resource, labels.FormatLabels(labelSelector))
+				objectList, err = ex.dynamicClient.Resource(obj.gvr).List(ctx, metav1.ListOptions{LabelSelector: labels.FormatLabels(labelSelector)})
 				if err != nil {
 					log.Errorf("Error listing objects: %v", err)
 					continue
 				}
-				numToChurn := int(math.Max(float64(ex.ChurnConfig.Percent*len(objectList.Items)/100), 1))
-				randStart := rand.Intn(len(objectList.Items) - numToChurn + 1)
-				objectsToDelete := objectList.Items[randStart : numToChurn+randStart]
+				// Sort objects by creation timestamp so that always the oldest are deleted first during churn
+				sort.Slice(objectList.Items, func(i, j int) bool {
+					timeI := objectList.Items[i].GetCreationTimestamp()
+					timeJ := objectList.Items[j].GetCreationTimestamp()
+					return timeI.Before(&timeJ)
+				})
+				log.Debugf("Total %s listed: %d, churning %d%%", obj.gvr.Resource, len(objectList.Items), ex.ChurnConfig.Percent)
+				percent := int(math.Max(float64(ex.ChurnConfig.Percent*len(objectList.Items)/100), 1))
+				objectsToDelete := objectList.Items[:percent]
+				log.Infof("Deleting %d %s", len(objectsToDelete), obj.gvr.Resource)
 				for _, objToDelete := range objectsToDelete {
-					log.Debugf("Deleting %s/%s", objToDelete.GetKind(), objToDelete.GetName())
-					err = ex.dynamicClient.Resource(obj.gvr).Namespace(objToDelete.GetNamespace()).Delete(ctx, objToDelete.GetName(), metav1.DeleteOptions{
-						PropagationPolicy: ptr.To(metav1.DeletePropagationForeground),
-					})
-					if err != nil {
-						log.Errorf("Error deleting object %s/%s: %v", objToDelete.GetKind(), objToDelete.GetName(), err)
-					}
 					trimObject(&objToDelete)
 					// Store the deleted objects to re-create them later
 					deletedObjects = append(deletedObjects, churnDeletedObject{
 						object: &objToDelete,
 						gvr:    obj.gvr,
 					})
+					ex.limiter.Wait(ctx)
+					wg.Add(1)
+					go func(object unstructured.Unstructured, obj object) {
+						var err error
+						defer wg.Done()
+						resource := ex.dynamicClient.Resource(obj.gvr)
+						var dr dynamic.ResourceInterface = resource
+						if obj.namespaced {
+							dr = resource.Namespace(object.GetNamespace())
+						}
+						log.Debugf("Deleting %s/%s/%s", object.GetKind(), object.GetNamespace(), object.GetName())
+						err = dr.Delete(ctx, object.GetName(), metav1.DeleteOptions{
+							PropagationPolicy: ptr.To(metav1.DeletePropagationForeground),
+						})
+						if err != nil {
+							log.Errorf("Error deleting object %s/%s: %v", object.GetKind(), object.GetName(), err)
+						}
+					}(objToDelete, *obj)
 				}
 			}
+			wg.Wait()
 		}
-		ex.verifyDelete(deletedObjects)
+		sort.Slice(deletedObjects, func(i, j int) bool {
+			timeI := deletedObjects[i].object.GetCreationTimestamp()
+			timeJ := deletedObjects[j].object.GetCreationTimestamp()
+			return timeI.Before(&timeJ)
+		})
+		ex.verifyDelete(ctx, deletedObjects)
+		if ex.ChurnConfig.DeleteDelay > 0 {
+			log.Infof("Sleeping for %v after deletion", ex.ChurnConfig.DeleteDelay)
+			time.Sleep(ex.ChurnConfig.DeleteDelay)
+		}
 		ex.reCreateDeletedObjects(ctx, deletedObjects)
 		log.Infof("Sleeping for %v", ex.ChurnConfig.Delay)
 		time.Sleep(ex.ChurnConfig.Delay)
@@ -535,30 +691,44 @@ func (ex *JobExecutor) reCreateDeletedObjects(ctx context.Context, deletedObject
 		if objectToCreate.object.GetNamespace() != "" {
 			affectedNamespaces[objectToCreate.object.GetNamespace()] = true
 		}
+		ex.limiter.Wait(ctx)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			ex.limiter.Wait(context.TODO())
 			ex.createRequest(ctx, objectToCreate.gvr, objectToCreate.object.GetNamespace(), objectToCreate.object, ex.MaxWaitTimeout)
 		}()
 	}
 	wg.Wait()
 	for namespace := range affectedNamespaces {
-		ex.waitForObjects(namespace)
+		ex.waitForObjects(ctx, namespace)
 	}
 }
 
 // verifyDelete verifies if the object has been deleted
-func (ex *JobExecutor) verifyDelete(deletedObjects []churnDeletedObject) {
+func (ex *JobExecutor) verifyDelete(ctx context.Context, deletedObjects []churnDeletedObject) {
+	var wg sync.WaitGroup
+	log.Debugf("Verifying deletion of %d objects", len(deletedObjects))
 	for _, obj := range deletedObjects {
-		wait.PollUntilContextCancel(context.TODO(), time.Second, true, func(ctx context.Context) (done bool, err error) {
-			_, err = ex.dynamicClient.Resource(obj.gvr).Namespace(obj.object.GetNamespace()).Get(context.TODO(), obj.object.GetName(), metav1.GetOptions{})
-			if kerrors.IsNotFound(err) {
-				return true, nil
-			}
-			return false, nil
-		})
+		wg.Add(1)
+		go func(o churnDeletedObject) {
+			defer wg.Done()
+			wait.PollUntilContextCancel(ctx, time.Second, true, func(ctx context.Context) (done bool, err error) {
+				if err = ex.limiter.Wait(ctx); err != nil {
+					return false, err
+				}
+				if o.object.GetNamespace() != "" {
+					_, err = ex.dynamicClient.Resource(o.gvr).Namespace(o.object.GetNamespace()).Get(ctx, o.object.GetName(), metav1.GetOptions{})
+				} else {
+					_, err = ex.dynamicClient.Resource(o.gvr).Get(ctx, o.object.GetName(), metav1.GetOptions{})
+				}
+				if kerrors.IsNotFound(err) {
+					return true, nil
+				}
+				return false, nil
+			})
+		}(obj)
 	}
+	wg.Wait()
 }
 
 // trimObject trims the object to remove the fields that conflict with the object recreation
